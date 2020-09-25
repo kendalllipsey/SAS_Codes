@@ -1,0 +1,132 @@
+## This scrapes US Climate Data and gives summary tables
+
+%macro Climscrape(state1=,state2=,state3=,state4=);
+filename states temp;
+%put u=&u;
+%do u=1 %to 4;
+proc http
+  url="https://www.usclimatedata.com/climate/&state&&u"
+  method='get'
+  out=states
+  ;
+quit;
+data _null_;
+  infile states dlm='>' lrecl=50000;
+  input @'<a class=stretched-link' info:$300. @@;
+ 
+  cityName=tranwrd(tranwrd(compress(scan(info,2,'='),'"'),'href',''),'Climate','');
+  cityLink=cats('https://www.usclimatedata.com',compress(scan(info,3,'='),'"'));
+  if cityName ne '' then do;
+    c+1;
+    call symput(cats('city',put(c,best.)),cityName);
+    call symput(cats('link',put(c,best.)),cityLink);
+    call symput('numCities',put(c,best.));
+  end;
+
+run;
+%put _user_;
+
+proc datasets library=work;
+  delete all;
+run;
+
+%do i=1 %to &numCities;
+filename climate temp;
+%put &i &&city&i;
+%put &&link&i;
+proc http
+  url="%trim(%left(&&link&i))"
+  method='get'
+  out=climate
+  ;
+quit;
+filename step1 temp;
+data _null_;
+  infile climate truncover;
+  input @'<div class=monthly_tables>' stuff $32767.;
+  if stuff ne '' then do;
+    file step1;
+    put stuff;
+  end;
+run;
+data step2&u;
+  infile step1 dlm='<>';
+  input tag:$200. @@;
+  if scan(tag,1,'') eq 'table' then do; table+1; row=0; end;
+  if scan(tag,1,'') eq 'tr' then row+1;
+  if substr(tag,1,1) eq '/' or
+    scan(tag,1,'') in ('tr','th','span','td','&nbsp;','abbr') then delete;
+run;
+proc transpose data=step2&u out=step3&u;
+  by table row;
+  where row ne 0;
+  var tag;
+run;
+
+proc transpose data=step3&u out=step4&u;
+  by table col1 notsorted;
+  where col1 not in ('Jan','Jul');
+  var col4-col9;
+run;
+data finish&u;
+  *city="%trim(%left(&&city&i))";
+  statenum=&u;
+  if statenum eq 1 then state = "North Carolina";
+  if statenum eq 2 then state = "Colorado";
+  if statenum eq 3 then state = "New York";
+  if statenum eq 4 then state = "Texas";
+  if statistic eq "	Av. precipitation in inch" then delete;
+  set step4&u;
+  month=6*(table-1)+input(substr(_name_,4,1),best.)-3;
+  value=input(tag,best.);
+  drop _name_ table tag ;
+  rename col1=Statistic;
+run;
+
+
+proc append base=all&u data=finish&u force;
+run;/***put the data sets together***/
+%end;
+%end;
+%mend;
+options nonotes mprint;
+%Climscrape(state1=north-carolina/united-states/3203,state2=colorado/united-states/3175,state3=new-york/united-states/3202,state4=texas/united-states/3213);
+
+
+*************************************************************************************************;
+data together;
+	set all1(in=NC)
+		all2(in=CO)
+		all3(in=NY)
+		all4(in=TX);
+	where Statistic eq 'Average low in ÂºF' or Statistic eq 'Average high in ÂºF';
+	if NC then state='North Carolina';
+	if CO then state='Colorado';
+	if NY then state='New York';
+	if TX then state='Texas';
+	Statistic = tranwrd(Statistic, 'Average low in ÂºF','Low Temp.');
+	Statistic = tranwrd(Statistic, 'Average high in ÂºF','High Temp.');
+	drop city;
+run;
+
+
+proc sort data=together out=finalclimate;
+	by month;
+run;
+
+proc means data=finalclimate mean nonobs;
+	class  state month statistic;
+	var value;
+	output out=meanclimate mean=avg; 
+run;
+*************************************************************************************************;
+proc sgpanel data=meanclimate;
+	panelby state / columns=4 novarname;
+	 styleattrs  datacontrastcolors=(red blue); 
+	vline month / response=avg group=statistic;
+	colaxis label='Month';
+	rowaxis label='Temperature';
+	keylegend/ title='';
+	footnote 'Averaged over all cities listed at USClimateData.com';
+run;
+
