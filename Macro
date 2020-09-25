@@ -1,0 +1,187 @@
+%macro reports3(stateList=);
+proc format;
+  value METRO
+    0 = "Not Identifiable"
+    1 = "Not in Metro Area"
+    2 = "Metro, Inside City"
+    3 = "Metro, Outside City"
+    4 = "Metro, City Status Unknown"
+  ;
+run;
+
+%let c=1; 
+%let state=%scan(&stateList,&c,|);
+%do %while(&state ne  ); 
+  ods pdf file="&state..pdf";
+  title "Report for %sysfunc(propcase(&state))";
+  footnote "Generated on %sysfunc(today(),worddate.) at %sysfunc(time(),timeampm.)";
+  proc report data=bookdata.ipums2005basic(where=(mortgageStatus contains 'Yes'
+      and metro gt 0));
+    column state Metro hhincome homeValue mortgagePayment;
+    define state / group 'State';
+    define metro / group 'Metro Status' format=metro.;
+    define hhincome / mean 'Mean Income' format=dollar9.;
+    define homeValue / mean 'Mean Home Value' format=dollar9.;
+    define mortgagePayment / mean 'Mean Payment' format=dollar7.;
+    break after state / style=[background=cxCCCCFF] summarize;
+    where upcase(state) eq "%upcase(&state)";
+  run;
+  ods pdf close;
+  %let c=%eval(&c+1); 
+  %let state=%scan(&stateList,&c,|);
+%end;  /***certain macro functions, and data step functions through %sysfunc, 
+        can make things more robust***/
+
+
+%mend;
+x 'cd C:\Users\kdl8569\Desktop\Reports';
+options mprint nodate nonumber;
+%reports3(stateList=North Carolina | South Carolina | Virginia);
+
+
+
+
+**********************************************;
+
+%macro reports5(courselist=);
+proc sql;
+  create table use as
+  select schedule.course_code, course_number, teacher, course_title, location, begin_date, fee 
+  from mysas.schedule,mysas.courses
+  where schedule.course_code eq courses.course_code
+  ;
+quit;
+
+data _null_; 
+  set use; 
+  call symput(cats("teach",put(course_number,2.)),trim(teacher)); 
+  call symput(cats("title",put(course_number,2.)),trim(course_title)); 
+  call symput(cats("loc",put(course_number,2.)),trim(location)); 
+  call symput(cats("dt",put(course_number,2.)),put(begin_date,worddate.)); 
+  call symput(cats("fee",put(course_number,2.)),put(fee,dollar6.)); 
+run;
+
+*don't have to do all above each time. Build it all then need to iterate;
+
+%let c=1; 
+%let crsnum=%scan(&courselist,&c,|);
+%do %while(&crsnum ne  ); 
+  ods pdf file="&&title..pdf";
+  title "Report for %sysfunc(propcase(&crsnum))";
+  footnote "Generated on %sysfunc(today(),worddate.) at %sysfunc(time(),timeampm.)";
+
+data _null_; 
+  set mysas.register end=final; 
+  where course_number=&crsnum; 
+  total+1; 
+  if paid='Y' then paidup+1; 
+  if final then do; 
+    call symput('paid',put(paidup,2.));
+    call symput('tot',put(total,2.));
+    if paidup < total then call symput('amt',put((total-paidup)*input("&&fee&crsnum",comma8.),dollar.));
+    else call symput('foot','All Students Paid'); 
+  end; 
+run; *must be inside while loop but before print because needs this*; 
+
+proc print data=mysas.register noobs; 
+  where course_number=&crsnum;
+  Title "Course &&title&crsnum";
+  title2 "Instructor: &&teach&crsnum";
+  title3 "Start Date: &&dt&crsnum";
+  title4 "Location: &&loc&crsnum";
+  footnote "Course fee: &&fee&crsnum";
+  %if(&paid lt &tot) %then %do;
+    footnote2 "&paid out of &tot students have paid";
+    footnote3 "&amt in fees outstanding";
+  %end;
+  %else %do;
+    footnote &foot;
+  %end;
+run; 
+
+  ods pdf close;
+  %let c=%eval(&c+1); 
+  %let crsnum=%scan(&courselist,&c,|);
+  
+%end;
+%mend;
+
+x 'cd C:\Users\kdl8569\Desktop\Reports';
+options mprint nodate nonumber;
+%reports5(courselist= 6 | 7 );
+
+
+
+
+
+*************************************************************************************;
+*if there is no list;
+
+
+%macro reports6;
+proc sql;
+  create table use as
+  select schedule.course_code, course_number, teacher, course_title, location, begin_date, fee 
+  from mysas.schedule,mysas.courses
+  where schedule.course_code eq courses.course_code
+  ;
+quit;
+
+data check; 
+  set use; 
+  call symput(cats("teach",put(course_number,2.)),trim(teacher)); 
+  call symput(cats("title",put(course_number,2.)),trim(course_title)); 
+  call symput(cats("loc",put(course_number,2.)),trim(location)); 
+  call symput(cats("dt",put(course_number,2.)),put(begin_date,worddate.)); 
+  call symput(cats("fee",put(course_number,2.)),put(fee,dollar6.)); 
+run;
+
+*don't have to do all above each time. Build it all then need to iterate;
+
+*need some type of condtional logic to tell it whether ...;
+%let c=1; 
+%let crsnum=%scan(&courselist,&c,|);
+%do %while(&crsnum ne  ); 
+  ods pdf file="&&title..pdf";
+  title "Report for %sysfunc(propcase(&crsnum))";
+  footnote "Generated on %sysfunc(today(),worddate.) at %sysfunc(time(),timeampm.)";
+
+data _null_; 
+  set mysas.register end=final; 
+  where course_number=&crsnum; 
+  total+1; 
+  if paid='Y' then paidup+1; 
+  if final then do; 
+    call symput('paid',put(paidup,2.));
+    call symput('tot',put(total,2.));
+    if paidup < total then call symput('amt',put((total-paidup)*input("&&fee&crsnum",comma8.),dollar.));
+    else call symput('foot','All Students Paid'); 
+  end; 
+run; *must be inside while loop but before print because needs this*; 
+
+proc print data=mysas.register noobs; 
+  where course_number=&crsnum;
+  Title "Course &&title&crsnum";
+  title2 "Instructor: &&teach&crsnum";
+  title3 "Start Date: &&dt&crsnum";
+  title4 "Location: &&loc&crsnum";
+  footnote "Course fee: &&fee&crsnum";
+  %if(&paid lt &tot) %then %do;
+    footnote2 "&paid out of &tot students have paid";
+    footnote3 "&amt in fees outstanding";
+  %end;
+  %else %do;
+    footnote &foot;
+  %end;
+run; 
+
+  ods pdf close;
+  %let c=%eval(&c+1); 
+  %let crsnum=%scan(&courselist,&c,|);
+  
+%end;
+%mend;
+
+x 'cd C:\Users\kdl8569\Desktop\Reports';
+options mprint nodate nonumber;
+%reports5(courselist= 6 | 7 );
