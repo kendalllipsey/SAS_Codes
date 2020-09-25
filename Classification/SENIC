@@ -1,0 +1,316 @@
+
+*1.	For the SENIC data:
+a.	Classify medical school affiliation from all other quantitative variables
+•	Logistic regression;
+
+ods exclude all;
+proc logistic data=mysas.senic;
+  model medsch = stay--beds census--fac_serv ;
+  output out=results predprobs=(I);
+run;
+
+ods select all;
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+ods select all;
+
+*Interpretation: Affiliated with Medical School 1=YES
+The non-affiliated school makes up a much larger proportion. It's correct classification rate is 95% compared to
+	 affiliated correct classificaiton of 76%. So it gets the larger group correct more often than the smaller group. 
+	 This is probably related to such a small sample size of affiliated (13).
+	 However, if our interest was getting accuracy up in the smaller group, we may need to try a different method. 
+
+Row percent: probability an affiliated hospital was classified as affiliated: 76.47%
+			 probability a non-affiliated hospital was classifed as affiliated: 4.17%
+			 
+The output data table, IP_1 and IP_2 shows the 'confidence' for each classification.
+
+*doesn't matter if you standardized or not, because 
+*doesn't matter if glogit or cumulative, because is binary. 
+*analysis of maximum likelihood estimates: 12.7 biggest so important features for classification. 
+*modeling 1 (2 as reference category)
+*-10 for number of beds: as number of beds goes up (all else fixed), the likelihood of med school affiliation goes down
+*if trying to minimize error, no way to change weight of variables in logistic;
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+a.	Classify medical school affiliation from all other quantitative variables
+•	Linear discriminant analysis—equal priors
+	o	Also review the canonical analysis and interpret;
+	
+proc discrim data=mysas.senic canonical out=results ncan=1 crossvalidate;
+  class medsch; 
+  var stay--beds census--fac_serv ;
+run;
+
+*The discrim shows overall error rate of only 8%, which is pretty good. 
+	*the correct classification for affiliated hospitals was 94%, a huge improvement compared to logistic (76%)
+	So while the correct classification for for unaffilated schools(89.5%) went down compared to logistic (95%) 
+*the canonical structure shows high loading on beds/fac/nurses/census. This indicates high loading
+	on things related to hospital size. 
+*the output data shows the classification, 'confidence'
+	 and a negative correlated between can1 and high probability classification2 (unaffiliated)
+*Cross-validate is worse- meaning this discriminate is chasing the data (when I don't allow the actual point in, does worse)
+*could interpret linear discrim features, but w/o standardizing hard to interpret. 
+*because only one CAN- standardized canconical coefficients. 
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+a.	Classify medical school affiliation from all other quantitative variables
+•	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+
+proc discrim data=mysas.senic canonical out=results ncan=1 crossvalidate;
+	priors proportional;
+	class medsch; 
+	var stay--beds census--fac_serv ;
+run;
+
+*overall error at 9%
+*correct classification for affiliated hospital (1) 59%
+*correct classification for unaffiliated hospital 96%
+	*so this increased the correct classification for unaffiliated schools (as opposed to 89% above)
+		at the expense of the smaller group, 59 decreased from 94.
+
+*considering intermediate choices between equal and proportional....
+*prior affiliated 17/113=.15 unaffiliated 96/113=.85;
+
+proc discrim data=mysas.senic canonical out=results crossvalidate;
+	priors '1'=.6 '2'=.4;
+	class medsch; 
+	var stay--beds census--fac_serv ;
+run;
+*82/84
+*canonical loading on size of hospital 
+*by giving a higher 'weight' in priors to 1 (the smaller group), can get the 
+correct classification rate almost equally on 1 and 2 (82/84%) and lowers overall 
+error to 17. 
+
+
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+a.	Classify medical school affiliation from all other quantitative variables
+•	Quadratic discriminant analysis—under all three prior choices;
+
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	class medsch; 
+	var stay--beds census--fac_serv ;
+run;
+
+*47/94 overall 30% incorrect
+
+* If you specify POOL=YES, then PROC DISCRIM uses 
+the pooled covariance matrix in calculating the (generalized) squared distances
+*If you specify POOL=NO, the procedure uses the individual
+ within-group covariance matrices in calculating the distances. 
+ Quadratic discriminant functions are computed.
+ BLUM: different covariance structure for each group;
+*******;
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	priors proportional;
+	class medsch; 
+	var stay--beds census--fac_serv ;
+run;
+
+*18% correct classification on small group and 98% correct on large group,
+the 98% brings the overall incorrect down to 14% but this is at the expense of the terrible
+classification of the small group. 
+*proportional priors is only giving class one 15% weight so this makes sense.;
+*******;
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	priors '1'=.6 '2'=.4;
+	class medsch; 
+	var stay--beds census--fac_serv ;
+run;
+*this brings class one correct classification up to 53, with only a slight reduction in correct
+classificaiton for class 2 (down to 93). Overall error increases to 31%
+*********************************************************************************************************************************************;
+*1.	For the SENIC data:
+a.	Classify medical school affiliation from all other quantitative variables
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors AND a best radius for a normal kernel
+	 (using full, pooled covariance in the distance metric);
+	 
+*not sure the directions here- use full metric where the circle/ellipse around eac centroid can be different pool=no 
+	OR asking for pooled=yes (identity matrix) and METRIC=FULL?;
+
+proc standard data=mysas.senic out=senstan mean=0 std=1;
+   var stay--beds census--fac_serv ;
+run;
+	 
+proc discrim data=senstan metric=full method=npar k=20 crossvalidate;
+  class medsch; 
+  var stay--beds census--fac_serv ;
+run;
+*correct classification 1-71%, 2-89%.
+*when run with k=25, get same accuracy on group one, but goes down for group two. 
+*when run with k=15, both go down (64/84)
+*******;
+
+proc discrim data=senstan method=npar r=4.5 crossvalidate metric=full;
+  class medsch; 
+  var stay--beds census--fac_serv ;
+run;
+*correct classification 1: 47 2:93 overall 30. Increasing group one comes at expense of 2 data points not having any nearest neighbors
+	at this radius. (ellipsoid centered at these observations)
+*when I went to r=4 worse 29/87
+*when I went to r= 5 worse 41/96 32
+
+**********************************************************************************************************************************************;
+**********************************************************************************************************************************************;
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+b.	Classify region from all other quantitative variables
+•	Logistic regression;
+
+ods exclude all;
+proc logistic data=mysas.senic;
+  model region = stay--beds
+    census--fac_serv / link=glogit;
+  output out=results predprobs=(I);
+run;
+
+ods select all;
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+ods select all;
+
+*need glogit here because nominal, not ordinal.; 
+*base line=4 (last one to enter);
+
+*The prior distribution of regions in this sample is more equal, with the exception of region four being under-represented (comparitively).
+1=NE 2=NC 3=S 4=W. This is possibly due to lower population density in region 4?
+
+*Results: The rates of predicted region vs. correct version is quite low. It is highest for region 4 (81%) 
+	and lowest for region 2 (37%).
+The output data table, IP_1 -- IP_4 shows the 'confidence' for each classification.	
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+b.	Classify region from all other quantitative variables
+•	Linear discriminant analysis—equal priors
+	o	Also review the canonical analysis and interpret;
+	
+proc discrim data=mysas.senic canonical out=results crossvalidate;
+  class region; 
+  var stay--beds census--fac_serv ;
+run;
+
+*don't have to standardize here because mahol distance=standard distance, already inverse of covariance.
+can standardize, just not necessary;
+
+*results: rates of predicted correectly was still quite low. 1:64%, 2: 34% (compared to 37% logistic)
+	3: 54% 4: 19% (Huge drop from 81% logistic). Overall error was 46%, still too high.
+
+*Canonical loading showed:
+	Can1: High loading for stay(.99) ratio (.96) x-ray(.91) /
+		fairly high for 'size' meausres nurses (.87) fac (85) census (.73)
+	Can2: interestingly, size of the hospital features loaded more evenly. census(.54) beds(.56)
+	can3: Age (.94)
+	
+Output data shows classification and 'confidence' for each classification
+*cross validate to look at better classification matrix. ;
+
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+b.	Classify region from all other quantitative variables
+•	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+
+proc discrim data=mysas.senic canonical out=results crossvalidate;
+	priors proportional;
+	class region; 
+	var stay--beds census--fac_serv ;
+run;
+
+*overall error at 45
+*correct classification for 1: 50
+*correct classification for 2: 25
+*correct classification for 3: 62
+*correct classification for 4: 31
+
+
+*considering intermediate choices between equal and proportional....
+*prior proportions 1: 28/113=.24  2:32/113=.28    3:37/113=.33      4:16/113=.14 ;
+
+proc discrim data=mysas.senic canonical out=results crossvalidate;
+	priors '1'=.25 '2'=.27 '3'=.28  '4'=.2 ;
+	class region; 
+	var stay--beds census--fac_serv ;
+run;
+*overall error at 59
+*correct classification for 1: 57
+*correct classification for 2: 22
+*correct classification for 3: 46
+*correct classification for 4: 38
+**********************************************************************************************************************************************;
+
+*1.	For the SENIC data:
+b.	Classify region from all other quantitative variables
+•	Quadratic discriminant analysis—under all three prior choices;
+
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	class region; 
+	var stay--beds census--fac_serv ;
+run;
+ *32/28/41/31/.67 bad;
+ 
+ 
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	priors proportional;
+	class region; 
+	var stay--beds census--fac_serv ;
+run;
+
+*overall error at .63
+*correct classification for 1: 36
+*correct classification for 2: 28
+*correct classification for 3: 46
+*correct classification for 4: 31;
+
+proc discrim data=mysas.senic crossvalidate outcross=CVClassification pool=no;
+	priors '1'=.25 '2'=.27 '3'=.28  '4'=.2  ;
+	class region; 
+	var stay--beds census--fac_serv ;
+run;
+*overall error at .66
+*correct classification for 1: 32
+*correct classification for 2: 28
+*correct classification for 3: 40
+*correct classification for 4: 31
+
+
+**********************************************************************************************************************************************;
+*1.	For the SENIC data:
+b.	Classify region from all other quantitative variables
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors and a best radius for a normal kernel
+	 (using full, pooled covariance in the distance metric);
+proc standard data=mysas.senic out=senstan mean=0 std=1;
+   var stay--beds census--fac_serv ;
+run;
+	 
+
+proc discrim data=senstan method=npar k=8 crossvalidate metric=full;
+  class region; 
+  var stay--beds census--fac_serv ;
+run;
+ *61/34/59/50-49 @10
+ *43/31/65/50-52 @9
+ *57/41/76/63-41 @8 - Lowest overall error. Does slightly worse on cat1, but best on all other categories. 
+ *50/24/65/50-50 @12
+ *50/19/57/44-58 @15
+ *46/31/35/50-59 @5
+ 
+
+
+*******;
+
+proc discrim data=senstan method=npar r=4.3 crossvalidate pool=no metric=full;
+  class region; 
+  var stay--beds census--fac_serv ;
+run;
+
+*29/16/62/100-48 @4.3 Terrible, but this is the best overall error I could get
+*25/13/54/100-52 @4.5
+*32/16/68/88- 49 @4 @can slightly raise cat 1 and 3 at expense of cat4. Overall error goes up. 
+*54 error @3, 60 @6, 53 @5
+*full metric using pooled covariances,. Something in Cat4 keeps it's accuaracy high. 
+
+
+**********************************************************************************************************************************************;
