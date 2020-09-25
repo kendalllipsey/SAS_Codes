@@ -1,0 +1,92 @@
+#Cars dataset Weight and Length and MSRP
+
+************************STEP 1***************************************************************;
+data cars; 
+	set sashelp.cars;
+	where type ne 'Hybrid' ;
+	row=_n_; 
+	run;
+/*User should remove any conditions not wanted (such as type ne Hybrid)*/
+
+*********************************************************************************************;
+************************STEP 2***************************************************************;
+ods exclude all;	
+proc reg data=cars outest=parameters;
+	model mpg_city = weight msrp length; 
+	output out=errors residual=residual predicted=pred;
+run;
+/*name of out (errors in this case) will be the name of your datain argument in boot macro*/
+/*name of residual (residual in this case) will be the name of your vars argument in boot macro*/
+
+*********************************************************************************************;
+************************STEP 3***************************************************************;
+options mstored sasmstore=macros;
+options mprint mlogic;
+
+%boot(datain=errors, vars=residual, out=boots, boots=10, outhits=y); 
+
+/*outhits=y. Outputs a distinct copy when it has multiple hits*/
+*********************************************************************************************;
+************************STEP 4***************************************************************;
+data boots;
+	set boots;
+	by replicate;
+	if first.replicate then row=0; 
+	row+1;
+run;
+
+*********************************************************************************************;
+************************STEP 5***************************************************************;
+proc sql; 
+	create table one as 
+	select parameters.*, origLength, origWeight, origMSRP, intercept+weight*origWeight+MSRP*origMSRP+length*origlength as yhat, row as mrow
+	from parameters, cars(rename=(weight=origWeight MSRP=origMSRP length=origLength)) /*user must rename variables*/
+	;
+	create table two as
+	select *, yhat+residual as yboot
+	from one, boots
+	where one.mrow eq boots.row
+	order by replicate, boots.row
+	;
+quit;
+/*User must rename variables from dataset
+Select: user must input renamed variable(s), and fill in slope forumula where names have been changed
+Adds error onto each bootstrap sample
+*/
+*********************************************************************************************;
+************************STEP 6***************************************************************;
+proc reg data=two outest=bootests(rename=(origWeight=weight origMSRP=MSRP origLength=length));
+  by replicate;
+  model yboot = origWeight origMSRP origLength;
+run;
+
+/*User must rename variables as in STEP 5*/
+
+*********************************************************************************************;
+************************STEP 7***************************************************************;
+ods exclude all;
+%jk (datain=cars, vars=weight msrp length mpg_city, out=jackknife, reps=425); 
+
+/*User must use same dataset as created in STEP 1
+User must define all variables used in step 8 (both response and variables) */
+
+*********************************************************************************************;
+************************STEP 8***************************************************************;
+proc reg data=jackknife outest=JKest;
+	by replicate;
+	model mpg_city=weight msrp length;
+run;
+
+*********************************************************************************************;
+************************STEP 9***************************************************************;
+ods exclude none;
+%BCaInterval(bootstrap=bootests, jk=jkest, original=parameters, stat=weight);
+%BCaInterval(bootstrap=bootests, jk=jkest, original=parameters, stat=MSRP);
+%BCaInterval(bootstrap=bootests, jk=jkest, original=parameters, stat=length);
+
+/*BCa Interval should be run on both variables you want confidence intervals for 
+bootstrap should be defined as output from STEP 6
+jk should be defined as output from STEP 8
+Original should be defined as output from STEP 2*/
+
+
