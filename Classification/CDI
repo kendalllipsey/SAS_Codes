@@ -1,0 +1,368 @@
+*3.	For the CDI data
+a.	Classify region from all other quantitative variables
+•	Logistic regression;
+
+ods exclude all;
+proc logistic data=mysas.cdi;
+  model region = land--inc_tot/ link=glogit;
+  output out=results predprobs=(I);
+run;
+*no proportional odds assumption nominal data;
+ods select all;
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+ods select all;
+
+*1: 68 2: 61  3: 71 4: 74  ;
+
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+a.	Classify region from all other quantitative variables
+•	Linear discriminant analysis—equal priors
+o	Also review the canonical analysis and interpret;
+
+proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  class region;
+  var land--inc_tot;;
+run;
+
+*1:65  2: 67 3: 55 4: 61 Overall 38  
+Can1: size (land, population, physicians, crimes)
+Can2: old, unemployed, rich (-18-34, hospital, -poverty(HIGH), unemployed, income)
+Can3: educated (-HS, BABAS, unemployed, -18-34)
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+a.	Classify region from all other quantitative variables
+•	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  priors proportional;
+  class region;
+  var land--inc_tot;
+run;
+*proportional priors: 1:23 2:24 3:34 4:18
+ 
+*1: 57 2:61 3:65  4:56   overall 39
+not much different than above, sample not very disparate, suprisingly well on class4 smallest;
+
+proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  priors '1'=.23 '2'=.24 '3'=.28 '4'=.25;
+  class region;
+  var land--inc_tot;
+run;
+
+*1:59  2: 66 3: 60  4:61 Overall 39
+not much wiggle room class1 (.23-.25), class2(.24-.25). Weigh class 3 less than data and class 4 more.;
+*results not much different as don't have much room between equal and proportional;
+
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+a.	Classify region from all other quantitative variables
+•	Quadratic discriminant analysis—under all three prior choices;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	class region; 
+	var land--inc_tot;
+run;
+*1: 45 2: 74 3:72  4: 62 overall 37 
+still pretty bad but not much difference
+ ;
+
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	priors proportional;
+	class region; 
+	var land--inc_tot;
+run;
+*1: 42  2: 70 3: 76 4: 61 overall 36  ;
+
+*proportional priors: 1:23 2:24 3:34 4:18;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	priors '1'=.23 '2'=.24 '3'=.28 '4'=.25;
+	class region; 
+	var land--inc_tot;
+run;
+*1: 42 2: 73  3:74  4:62 overall 38;
+**********************************************************************************************************************************************;
+
+*3.	For the CDI data
+a.	Classify region from all other quantitative variables
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors and a best radius for a normal kernel 
+(using full, pooled covariance in the distance metric);
+
+proc standard data=mysas.cdi out=cdistan mean=0 std=1;
+    var land--inc_tot;
+run;
+
+proc discrim data=cdistan method=npar k=8 crossvalidate metric=full;
+	class region; 
+	var land--inc_tot;
+run;
+
+*77/60/66/76-30 @5
+*79/68/61/77-29 @8
+*79/69/58/75-30 @10
+ 40@100, 32@30, 31@20
+;
+
+proc discrim data=cdistan method=npar r=2.5 crossvalidate metric=full;
+	class region; 
+	var land--inc_tot;
+run;
+
+*62/75/49/48-41@2.5
+*58/82/45/47-42 @3
+*54@4,50@2;
+
+**********************************************************************************************************************************************;
+proc format;
+  value cap
+  low-<16000='Low'
+  16000-<19000='Between'
+  19000-high='High'
+  ;
+run;
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+b.	Classify income per capita—below $16,000, above $19,000,or between—from other quantitative variables, 
+ but using only one of total population or total income (determine which is best).
+•	Logistic regression;
+
+****TOTPOP*****;
+ods exclude none;
+proc logistic data=mysas.cdi;
+	format inc_per_cap cap.;
+  model inc_per_cap = land--unemp/ link=glogit unequalslopes;
+  output out=results predprobs=(I);
+run;
+
+*proportional odds fails, need unequal slopes;
+
+ods select all;
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+*72/85/88 ;
+
+ ***TOTINCOME***;
+ods exclude none;
+proc logistic data=mysas.cdi;
+format inc_per_cap cap.;
+  model inc_per_cap = land pop18_34--unemp inc_tot/unequalslopes link=glogit;
+  output out=results predprobs=(I);
+run;
+*proportional odds fails;
+ods select all;
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+*After trying both total income and total population for alogt/glogit/and cumulative, TOTALINCOME was by far the best:
+B: 83 H: 87 L: 69;
+
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+b.	Classify income per capita—below $16,000, above $19,000,or between—from other quantitative variables, 
+ but using only one of total population or total income (determine which is best).
+ •	Linear discriminant analysis—equal priors
+o	Also review the canonical analysis and interpret;
+
+**TOTINCOME***;
+proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  format inc_per_cap cap.;
+  class inc_per_cap;
+  var land pop18_34--unemp inc_tot;
+run;
+ *B: 75 H: 79 L: 63 Overall .278. 
+ This was SLIGHTLY better than with totpopulation. 
+ *canonical loading was Everything except 18-34 very high on CAN1, 18-34 high on CAN2. 
+ This loading was the same for total population LDA. 
+
+***TOTPOP****;
+proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  format inc_per_cap cap.;
+  class inc_per_cap;
+  var land--unemp;
+run;
+*75/80/64-.273;
+* This was SLIGHTLY better than with totincome.
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+b.	Classify income per capita—below $16,000, above $19,000,or between—from other quantitative variables, 
+ but using only one of total population or total income (determine which is best).
+ •	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+
+ ***TOTINC*****;
+ proc discrim data=mysas.cdi canonical out=results crossvalidate;
+  priors proportional;
+  format inc_per_cap cap.;
+  class inc_per_cap;
+  var land pop18_34--unemp inc_tot;
+run;
+*Proportional priors: B:43 H:34 L:23;
+
+*B: 86 H: 73 L: 50 Overall .27. 
+L is the lowest number of observations, so needs more weight or gets scewed. ;
+
+*****TOTPOP*****;  
+proc discrim data=mysas.cdi  out=results;
+  priors proportional;
+  format inc_per_cap cap.;
+   class inc_per_cap;
+  var land--unemp;
+run;
+
+*B: 87 H: 77 L: 51 Overall .25. So this one (totpop) SLIGHTLY better than TOTINC, but close 
+;
+
+****TOTINCOME******:
+*Proportional priors: B:43 H:34 L:23;
+proc discrim data=mysas.cdi  out=results crossvalidate;
+	priors 'Between'=.37 'High'=.33 'Low'=.3;
+	format inc_per_cap cap.;
+	class inc_per_cap;
+	var land pop18_34--unemp inc_tot;
+run;
+*B: 79 H: 76 L: 57 Overall .28. This is close to equal, just more weight to smallest group. ;
+*not much wiggle room for High(.33-.34)
+
+*****TOTPOP******;
+proc discrim data=mysas.cdi  out=results crossvalidate;
+	priors 'Between'=.37 'High'=.33 'Low'=.3;
+	format inc_per_cap cap.;
+	class inc_per_cap;
+	var land--unemp;
+run;
+*B: 82 H: 78 L: 60 Overall .26. VERY similar to above, but TOTPOP slightly better ;
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+b.	Classify income per capita—below $16,000, above $19,000,or between—from other quantitative variables, 
+ but using only one of total population or total income (determine which is best).
+ •	Quadratic discriminant analysis—under all three prior choices;
+ *TOTALINCOME better on all three here;
+ 
+ 
+ ***TOTINCOME***;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    class inc_per_cap;
+    var land pop18_34--unemp inc_tot;
+run;
+*B: 29 H: 76 L: 90 Overall .35;
+
+
+***TOTPOP**;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    class inc_per_cap;
+    var land--unemp;
+run;
+*B: 22 H: 78 L: 89 Overall .37   So TOTINCOME better on quadratic equal priors;
+
+
+***TOTINCOME***;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    priors proportional;
+    class inc_per_cap;
+    var land pop18_34--unemp inc_tot;
+run;
+*B: 38 H: 75 L: 87 Overall .38;
+
+***TOTPOP**;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    priors proportional;
+    class inc_per_cap;
+    var land--unemp;
+run;
+*B: 31 H: 76 L: 87 Overall .41 pretty terrible.   So TOTINCOME better on quadratic proportional priors;
+
+***TOTINCOME***;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    priors 'Between'=.37 'High'=.33 'Low'=.3;
+    class inc_per_cap;
+    var land pop18_34--unemp inc_tot;
+run;
+*B: 32 H: 76 L: 89 Overall .37 pretty terrible;
+
+***TOTPOP**;
+proc discrim data=mysas.cdi crossvalidate outcross=CVClassification pool=no;
+	format inc_per_cap cap.;
+    priors 'Between'=.37 'High'=.33 'Low'=.3;;
+    class inc_per_cap;
+    var land--unemp;
+run;
+*B: 26 H: 77 L: 87 Overall .39 So TOTINCOME better on quadratic Between equal and proportional priors;
+
+**********************************************************************************************************************************************;
+*3.	For the CDI data
+b.	Classify income per capita—below $16,000, above $19,000,or between—from other quantitative variables, 
+ but using only one of total population or total income (determine which is best).
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors 
+and a best radius for a normal kernel (using full, pooled covariance in the distance metric)
+;
+
+proc standard data=mysas.cdi out=cdistan mean=0 std=1;
+    var land pop18_34--unemp inc_tot;
+run;
+
+proc standard data=mysas.cdi out=cdistand mean=0 std=1;
+    var land--unemp;
+run;
+
+***TOTINCOME***;
+proc discrim data=cdistan method=npar k=13 crossvalidate metric=full;
+	format inc_per_cap cap.;
+	class inc_per_cap; 
+	var land pop18_34--unemp inc_tot;
+run;
+*64/86/72-26@13
+*65/83/71-27@12
+*69/76/59-32 @3
+
+*28@80,30@100, 27@20, 27@15;
+
+***TOTPOP**;
+proc discrim data=cdistand method=npar k=12 crossvalidate metric=full;
+	format inc_per_cap cap.;
+	class inc_per_cap; 
+	var land--unemp;
+run;
+
+*64/85/73-26 @12
+*63/83/63-30 @4
+*26@12,30@100,28@30, 27@20,29@10 
+
+*K-Nearest neighbors same for TOTPOP and TOTINC
+
+***TOTINCOME***;
+proc discrim data=cdistan method=npar r=3 crossvalidate metric=full;
+	format inc_per_cap cap.;
+	class inc_per_cap; 
+	var land pop18_34--unemp inc_tot;
+run;
+
+*76/66/51-36@2.5
+*65/57/49-43@2
+*80/65/49-35@3
+*44@4,37@3.5
+
+***TOTPOP**;
+
+proc discrim data=cdistand method=npar r=3.5 crossvalidate metric=full;
+	format inc_per_cap cap.;
+	class inc_per_cap; 
+	var land--unemp;
+run;
+
+*79/66/50-35@3
+*43@2,43@4,36@2.5,37@3.5
+;
+*results between totalpop and totalinc same on adaptive radius
+
+OVERALL: TOTPOP SLIGHTLY better on most, but TOTINC WAY better on logistic, so would go with TOTINC;
+**********************************************************************************************************************************************;
+
+**********************************************************************************************************************************************;
+
+
+**************************************************************
