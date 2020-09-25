@@ -1,0 +1,145 @@
+
+####This scrapes the XFL website and provides summary tables
+
+%macro xflscrape;
+%do game=1 %to 20;
+
+filename xflbox temp;
+
+proc http
+  url="https://stats.xfl.com/&game"
+  out=xflbox
+  method='get'
+  ;
+run;
+
+data one;
+  infile xflbox truncover lrecl=200000 length=RecordLength; 
+  total=0;
+  input one$ type:$20. dummy$ @; 
+  if one eq 'var' and type eq 'offensiveStats' ;
+  group+1;
+  call symput(cats('name' ,put(group,best.)),type) ;
+  RL=RecordLength;
+  do until(total ge RecordLength);
+    input stuff $25000. @;
+    stuff=tranwrd(stuff,';',''); 
+    total+25000;
+    output;
+    call symput('lines' ,put(group,best.)) ;
+  end;
+run;
+%put _user_;
+
+*data two;
+*	set one;
+*	where type eq 'offensiveStats';
+*run;
+
+proc transpose data=one out=two;
+  by group type;
+  var stuff;
+run;
+
+
+%macro makeLines;
+
+ %do i=1 %to &lines;
+
+  filename out&i "\Users\kdl8569\Documents\My SAS Files\Spring Semester\Scraping\game&game%trim(&&name&i).txt" ;
+ 											
+  data _null_; 
+    set two(firstobs=&i obs=&i);                        
+    file out&i lrecl=200000;           
+    put col1 1-25000 ;*col2 25001-50000 col3 50001-75000 col4 75001-100000;
+  run;
+  
+ %end;
+ 
+ %do k=1 %to &lines;
+   libname Game&game&k JSON "\Users\kdl8569\Documents\My SAS Files\Spring Semester\Scraping\game&game%trim(&&name&k).txt" ;
+    
+ %end; 
+%mend;
+options mprint spool;
+%makeLines;
+
+%end; 
+%mend;
+
+%xflscrape;
+
+****************************************************************************************;
+
+
+
+
+****************************************************************************************;
+data blank;
+run;
+
+%macro wonderful;
+%do i=11 %to 201 %by 10;
+proc sql;
+	create table awayfun as
+	select away_passing.* , away.name
+	from game&i..away_passing, game&i..away
+	where away_passing.ordinal_away eq away.ordinal_away
+	;
+quit;
+proc sql;
+	create table awayfinal&i as
+	select unique (sum(completions)/sum(attempts)) as comppct, sum(yards) as totyards, max(yardsLong) as Longplay, name
+	from awayfun
+	;
+quit;
+proc sql;
+	create table homefun as
+	select home_passing.* , home.name
+	from game&i..home_passing, game&i..home
+	where home_passing.ordinal_home eq home.ordinal_home
+	;
+quit;
+proc sql;
+	create table homefinal&i as
+	select unique (sum(completions)/sum(attempts)) as comppct, sum(yards) as totyards, max(yardsLong) as Longplay, name
+	from homefun
+	;
+quit;
+
+
+
+data try;
+	length name $50.;
+	set try homefinal&i awayfinal&i;
+run;
+
+%end;
+%mend;
+%wonderful;
+
+
+
+proc sort data=try out=sorted;
+	by name;
+run;
+	
+data withgame;
+	set sorted;
+by name;
+if FIRST.name then game=0;
+game+1;
+if game lt 6;
+if totyards ne '.';
+run;
+
+proc sgpanel data=withgame;
+	panelby name / columns=4 novarname;
+	 *styleattrs  datacontrastcolors=(red blue);
+	vbar game/ response=comppct  ;
+	colaxis label='Game';
+	rowaxis label='Completion Percent';
+	keylegend/ title='';
+	*footnote 'Averaged over all cities listed at USClimateData.com';
+run;
+****************************************************************************************;
