@@ -1,0 +1,220 @@
+
+*************Programming 1.A.***********;
+data work.my1a;
+	set bookdata.ratings2016(in = in2016)
+		bookdata.ratings2017(in = in2017);
+	if in2016 eq 1 then Year = 2016;
+	else if in2017 eq 1 then Year = 2017;
+run; 
+
+*****************Programming 1.B***********;
+proc sort data=bookdata.ratings2016 out=sortedratings2016;
+	by Str2 Str1;
+run; 
+
+proc sort data=bookdata.ratings2017 out=sortedratings2017;
+	by Str2 Str1;
+run; 
+
+data work.my1b;
+	set work.sortedratings2016(in = in2016)
+		work.sortedratings2017(in = in2017);
+	by Str2;
+	if in2016 eq 1 then Year = 2016;
+	else if in2017 eq 1 then Year = 2017;
+run; 
+
+***********************Programming 1.C*****************;
+*didn't run sort again because called on the work.sortedratings which I went ahead and
+sorted on str2 and str1, so wouldnt have to run another sort;
+
+data work.my1c;
+	set work.sortedratings2016(in = in2016)
+		work.sortedratings2017(in = in2017);
+	by Str2 Str1;
+	if in2016 eq 1 then Year = 2016;
+	else if in2017 eq 1 then Year = 2017;
+run; 
+
+*************************Programming 2********************;
+*Using the data sets from the previous question, use the appropriate function(s) to create a new
+variable, Stars, that is numeric and contains the number of stars assigned to each restaurant. (For
+example, in the 2016 data the values should be 4.5, 4, 5, 3, and 5.) Interleave the resulting data sets
+by Stars and ID, and include the year in which the restaurant was rated.;
+
+proc sort data=bookdata.ratings2016 out=sorted2ratings2016;
+	by Str1 ID;
+run; 
+
+proc sort data=bookdata.ratings2017 out=sorted2ratings2017;
+	by Str1 ID;
+run; 
+
+data work.my2;
+	set work.sorted2ratings2016(in = in2016)
+		work.sorted2ratings2017(in = in2017);
+	by Str1 ID;
+	
+	Stars = input(tranwrd(scan(Str1, 1, ' '),'/','.'),best.);
+	if in2016 eq 1 then Year = 2016;
+	else if in2017 eq 1 then Year = 2017;
+	drop Str1;
+run; 
+
+****************************Programming 3.A****************;
+*3. Use the Sashelp.Stocks data set to do the following.
+a. Create a new data set that includes two new variables, with one being Year. The other is
+FiscalSeason, which has the values Federal1 during the months October, November, and
+December . Federal2 during the months January, February, and March. Federal3 during the
+months April, May, June. and Federal4 for the months of July, August, and September.
+;
+
+data work.my3a;
+	set sashelp.stocks;
+	Year = year(Date);
+	if month(Date) in (10,11,12) then FiscalSeason = 'Federal1';
+		else if month(Date) in (1,2,3) then FiscalSeason = 'Federal2';
+		else if month(Date) in (4,5,6) then FiscalSeason = 'Federal3';
+		else if month(Date) in (7,8,9) then FiscalSeason = 'Federal4';
+	
+run;
+
+******************Programming 3.B.*****************************;
+*b. Summarize the maximum and minimum of monthly high price for each combination of Year
+and FiscalSeason.;
+data work.my3b;
+	set sashelp.stocks;
+	Year = year(Date);
+	month = month(Date);
+	if month(Date) in (10,11,12) then FiscalSeason = 1 ;
+		else if month(Date) in (1,2,3) then FiscalSeason = 2 ;
+		else if month(Date) in (4,5,6) then FiscalSeason = 3 ;
+		else if month(Date) in (7,8,9) then FiscalSeason = 4;
+	
+run;
+
+proc univariate data=work.my3b;
+	var month Year FiscalSeason high low;
+run;
+*MEANS below is bestter: 
+means better for output table to graph
+univariate not condusive to being use later
+
+****************************Programming 3.C*******************;
+
+data work.my3c;
+	set sashelp.stocks;
+	Year = year(Date);
+	if month(Date) in (10,11,12) then FiscalSeason = 'Federal1';
+		else if month(Date) in (1,2,3) then FiscalSeason = 'Federal2';
+		else if month(Date) in (4,5,6) then FiscalSeason = 'Federal3';
+		else if month(Date) in (7,8,9) then FiscalSeason = 'Federal4';
+run;
+
+proc means data=work.my3c;
+	where year ge 2000;
+	class FiscalSeason year stock;
+	var high;
+	ods output summary=work.means;
+run;
+
+proc sgpanel data=work.means;
+	panelby FiscalSeason/ columns=2;
+	highlow x=year low=high_min high=high_max / group=stock groupdisplay=cluster type=bar barwidth=1 clusterwidth=1;
+	rowaxis label='Minimum to Maximum Values of High Stock Price' ;
+	colaxis values=(2000 to 2006 by 2);
+run; 
+
+***ASK: how to get only years 2000,2002, 2004? 
+	*commented out above doesn't include 2005, if go to 2006 then shows 2006
+	if do 2000,2002,2004 then leaves out 2005?
+	
+****************Programming 4*******************;
+proc univariate data=sashelp.shoes;
+	var Sales Inventory Returns;
+	qqplot Sales;
+	qqplot Inventory;
+	qqplot Returns;
+ODS SELECT quantiles extremeobs qqplot;
+	
+run;
+
+
+**********************Programming 5*************;
+data work.my6;
+	set sashelp.shoes;
+	Sales=(sales/stores);
+	Inventory=(Inventory/stores);
+	Returns=(Returns/Stores);
+run;
+
+proc univariate data=work.my6;
+	var Sales Inventory Returns;
+	qqplot Sales;
+	qqplot Inventory;
+	qqplot Returns;
+ODS SELECT quantiles extremeobs qqplot;
+	
+run;
+
+******ASK...IS this what I am looking for?******;
+ 
+*************Programming 6********************;
+data work.dflights;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\flights.dat";
+	input FlightNum 1-3 Date MMDDYY7. Destination$ 12-14 FirstClass 16-17 EconClass 18-20;
+	if FirstClass eq '.' then putlog 'Note:' FlightNum= FirstClass=;
+	if Destination eq 'DFW' or Date lt '14DEC00'd then LIST;
+	format Date date.;
+run; 
+
+*****************Programming 7*****************;
+*7. Write a program that does all of the following:
+◦ Uses the PUTLOG statement to write the complete PDV if any variable is missing.
+◦ Uses the LIST statement to write the complete input buffer if any variable is missing.
+◦ Includes a comment detailing whether the PUTLOG or LIST statement is a better debugging tool
+in this scenario: easier to see values in LIST but easier to detect what's missing in PUTLOG. 
+ASK******^ putlog or list?
+◦ Validates the data set against the Flights data set created in the previous exercise.
+ANSWER: LIST easier to detect WHY the things are missing. Correct answer. 
+;
+
+data work.dflights2;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\flights.dat";
+	input FlightNum 1-3 Date MMDDYY7. Destination$ 12-14 FirstClass 16-17 EconClass 18-20;
+	if FlightNum eq . then do;
+		putlog 'Note:' FlightNum= Date= Destination FirstClass= EconClass=;
+		LIST;
+		end;
+	if Date eq . then do;
+		putlog 'Note:' FlightNum= Date= Destination FirstClass= EconClass=;
+		LIST;
+		end;
+	if Destination eq ' ' then do;
+		putlog 'Note:' FlightNum= Date= Destination FirstClass= EconClass=;
+		LIST;
+		end;
+	if FirstClass eq . then do;
+		putlog 'Note:' FlightNum= Date= Destination FirstClass= EconClass=;
+		LIST;
+		end;
+	if EconClass eq . then do;
+		putlog 'Note:' FlightNum= Date= Destination FirstClass= EconClass=;
+		LIST;
+		end;
+	format Date date.;
+run; 
+
+proc compare base=work.dflights compare=work.dflights2 outnoequal;
+run;
+
+******************Programming 8**********************;
+data work.cars;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\cars.datfile" dlm='09'x firstobs=2;
+	input Make : $ Model  : $ Type : $  
+	Origin : $ Drivetrain MSRP Invoice  
+	EngineSize Cylinders Horsepower CityMPG 
+	HighwayMPG Weight Wheelbase Length;
+run; 
+
+***TAB DELIMITED
