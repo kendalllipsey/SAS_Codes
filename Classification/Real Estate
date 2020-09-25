@@ -1,0 +1,276 @@
+*2.	For the REAL_ESTATE data:
+a.	Classify price—over $300,000, less than $200,000, or between—based on all other quantitative variables
+•	Logistic regression;
+proc format;
+  value real
+  low-<200000='Low'
+  200000-<300000='Between'
+  300000-high='High'
+  ;
+run;
+
+
+ods trace on;
+ods exclude none;
+proc logistic data=mysas.real_estate order=interal;
+  format price real.;
+   model price = sq_ft bedrm bathrm garage lot / link=alogit unequalslopes;
+  output out=results predprobs=(I);
+run;
+
+*proportional odds test fails, (<.0001), need unequal slope;
+
+*alogit (proportional odds simplification) helpful here: 68/81/84
+	*contrasts two adjacent response categories rather than involving the entire response scale 
+	(as with cumulative logit)
+
+*cumulative:60/89/0;
+
+*BLUM: if using alogit with unequal slopes, basically the same as glogit but must still 
+be order=internal (because still using ordinal)
+However, in general, if proportional odds assumption fails, just use glogit
+Remember, that if it fails it could be that only one of the 'steps' on the order fails, not all of them
+	because odds assumption is for whole dataset
+	May want to go back and see which one doesn't fit (fails for just one)
+Ajacent just used to help interpret (bc comparing to next lower/higher step)
+	
+
+
+ods select all;
+proc freq data=results order=formatted;
+  table _from_*_into_ / nopercent;
+run;
+ods select all;
+
+*output dataset shows classification and 'confidence' in each classification
+*if you use glogit, don't have to do other stuff. If you use alogit have to do order=internal.;
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+a.	Classify price—over $300,000, less than $200,000, or between—based on all other quantitative variables
+•	Linear discriminant analysis—equal priors
+	o	Also review the canonical analysis and interpret;
+proc discrim data=mysas.real_estate canonical out=results crossvalidate;
+  format price real.;
+  class price;
+  var sq_ft bedrm bathrm garage lot;
+run;
+	
+*between:63, high:79, low:84, overall: 25
+
+*Canonical Loading: difficult to interpret, all variables  HIGH (.99) loading on CAN1, 
+all variables low on CAN 2.
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+a.	Classify price—over $300,000, less than $200,000, or between—based on all other quantitative variables
+•	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+
+proc discrim data=mysas.real_estate out=results crossvalidate;
+  format price real.;
+  priors proportional;
+  class price;
+  var sq_ft bedrm bathrm garage lot;
+run;
+* proportional priors: between:34, low:29, high:36
+	
+*between:63, high:77, low:84, overall: 25
+*these results are very similar to equal prios, a decrease in 2 points for high, but other two are the same. 
+*number in each group pretty well distributed so this makes sense- proportional and equal not that different;
+
+**********;
+
+proc discrim data=mysas.real_estate out=results crossvalidate;
+  format price real.;
+  priors 'between'=.34 'low'=.32 'high'=.34; * 66/79/82-24;
+  class price;
+  var sq_ft bedrm bathrm garage lot;
+run;
+ 
+*There is not much wiggle room for 'between(.33-.34)' or 'high(.33-.36)';
+*slightly better than proportional, and equal, but close. 
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+a.	Classify price—over $300,000, less than $200,000, or between—based on all other quantitative variables
+•	Quadratic discriminant analysis—under all three prior choices;
+
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	format price real.;
+	class price; 
+	var sq_ft bedrm bathrm garage lot;
+run;
+
+*between:67 , high: 81, low: 82, overall: 23 
+*************;
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	format price real.;
+	priors proportional;
+	class price; 
+	var sq_ft bedrm bathrm garage lot;
+run;
+* proportional priors: between:34, low:29, high:36
+
+*between:67, high: 80, low: 82, overall: 24 
+
+*this makes sense, the groups aren't that disparate in size so porportional vs. equal is very close.;
+**************;
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	format price real.;
+	priors 'between'=.34 'high'=.34 'low'=.32;
+	class price; 
+	var sq_ft bedrm bathrm garage lot;
+run;
+*between: 69, high: 81, low: 81, overall: 23
+
+*not too far off from others- because their priors didn't have to be changed much.;
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+a.	Classify price—over $300,000, less than $200,000, or between—based on all other quantitative variables
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors AND a best radius for a normal kernel
+	 (using full, pooled covariance in the distance metric);
+
+proc standard data=mysas.real_estate out=realstan mean=0 std=1;
+    var sq_ft bedrm bathrm garage lot;
+run;
+	 
+proc discrim data=realstan method=npar k=35 crossvalidate metric=full;
+	format price real.;
+	class price; 
+	var sq_ft bedrm bathrm garage lot;
+run;
+
+*70/81/82-23 @35
+
+*the number of neigbors has little effect on the correct classification rate
+
+*70/83/77-24 @10, *64/81/79-25 @20, *68/80/82-23 @30, *69/79/81-24 @40, *70/78/80-24 @50
+*70/72/82-25 @100, *74/67/87-24 @150
+
+*******;
+proc discrim data=realstan method=npar r=2 crossvalidate metric=full;
+	format price real.;
+	class price; 
+	var sq_ft bedrm bathrm garage lot;
+run;
+
+*69/76/81-25 @2
+*72/65/82-27 @3
+*66/48/84-34 @4
+*1 and 2.5 worse
+ 
+**********************************************************************************************************************************************;
+**********************************************************************************************************************************************;
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+b.	Classify quality from all other quantitative variables
+•	Logistic regression;
+
+ods exclude none;
+proc logistic data=mysas.real_estate;
+  model qual = sq_ft bedrm bathrm garage lot price/ link=alogit unequalslopes;
+  output out=results predprobs=(I);
+run;
+*p/chi value .0120- proportional odds false. Need unequal slope. ;
+
+proc freq data=results;
+  table _from_*_into_ / nopercent;
+run;
+ods select all;
+
+*outdata shows 'confidence' in each prediction per observation. 
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+b.	Classify quality from all other quantitative variables
+•	Linear discriminant analysis—equal priors
+	o	Also review the canonical analysis and interpret;
+
+proc discrim data=mysas.real_estate canonical out=results crossvalidate;
+  class qual;
+  var sq_ft bedrm bathrm garage lot price;
+run;
+	
+*1:87/66/95-18. 
+
+*canonical loading hard to interpret: high loading on can1 for everything, low on can2?
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+b.	Classify quality from all other quantitative variables
+•	Linear discriminant analysis—proportional priors, also considering intermediate choices between equal and proportional;
+
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification;
+	priors proportional;
+	class qual; 
+	var sq_ft bedrm bathrm garage lot price;
+run;
+*priors proportional 1: 13, 2: 56, 3: 31
+
+*78/80/81-20. This does suprisingly well for class1 with such low weight;
+
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification;
+	 *priors '1'=.28 '2'=.41 '3'=.31; *84/71/91-19;
+	 priors '1'=.3 '2'=.39 '3'=.31; *87/70/93-18;
+	*priors '1'=.31 '2'=.46 '3'=.23; *84/82/73-19;
+	class qual; 
+	var sq_ft bedrm bathrm garage lot price;
+run;
+
+*not much wiggle room on cat3 (31-33)
+*Had to more heavily weigh 1 (it only has 68 observations), and downplay 2 (290 observations);
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+b.	Classify quality from all other quantitative variables
+•	Quadratic discriminant analysis—under all three prior choices;
+
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	class qual; 
+	var sq_ft bedrm bathrm garage price lot;
+run;
+
+*87/64/91-19;
+
+
+*priors proportional 1: 13, 2: 56, 3: 31;
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	priors proportional;
+	class qual; 
+	var sq_ft bedrm bathrm garage price lot;
+run;
+*79/72/85-23;
+*did worse than equal on class1- smaller weight, did better on class 2-higher weight;
+
+proc discrim data=mysas.real_estate crossvalidate outcross=CVClassification pool=no;
+	priors '1'=.3 '2'=.39 '3'=.31;
+	class qual; 
+	var sq_ft bedrm bathrm garage price lot;
+run;
+*85/68/88-21. Slightly better.;
+
+**********************************************************************************************************************************************;
+*2.	For the REAL_ESTATE data:
+b.	Classify quality from all other quantitative variables
+•	Non-parametric discriminant analysis—determine a best k for k-nearest neighbors and a 
+best radius for a normal kernel (using full, pooled covariance in the distance metric);
+
+proc standard data=mysas.real_estate out=realstan mean=0 std=1;
+    var sq_ft bedrm bathrm garage price lot;
+run;
+
+proc discrim data=realstan method=npar k=100 crossvalidate metric=full;
+	class qual; 
+	var sq_ft bedrm bathrm garage price lot;
+run;
+*93/68/90-17 @20
+*doesn't change much between k=10 and k-100;
+;
+proc discrim data=realstan method=npar r=2.5 crossvalidate metric=full;
+	class qual; 
+	var sq_ft bedrm bathrm garage price lot;
+run;
+
+*66/60/91-28 @2
+*78/63/94-22 @2.5
+*78/61/95-22 @3;
