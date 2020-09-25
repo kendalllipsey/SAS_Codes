@@ -1,0 +1,140 @@
+options mstored  sasmstore=macros; 
+%macro boot(datain=,vars=,out=,boots=10000,outhits=N)/store;
+proc surveyselect data=&datain(keep=&vars) out=&out method=urs samprate=100 reps=&Boots
+    %if(%upcase(&outhits) eq Y) %then outhits;
+    ; 
+run;
+%mend;
+/* Returns bootstrap samples from desired dataset
+
+User is expected to define the following:
+	datain: this should be the data defined from a PROC REG out=
+	vars: this should be the residual defined from PROC REG residual=
+	out: this should be the name of the dataset you want to save your bootstraps as
+
+The following arguments have defaults, but the user can choose an alternate value:
+	boots: default 10000. User can input an alternate non-negative integer for the number of bootstrap samples desired
+	outhits: default N (no). User can select (y) if a distinct copy of each selected unit is desired
+ */
+
+***********************************************************************************************;
+%macro jk(datain=, vars=, out=,reps=)/store;
+proc surveyselect data=&datain(keep=&vars) out=&out method=srs samprate=100 reps=&reps;
+run;
+
+data &out; 
+  set &out;
+  by replicate; 
+  if first.replicate then c=0;
+  c+1;
+  if c=replicate then delete;
+  numberhits=1; 
+  drop c;
+run;
+%mend;
+
+/*Returns Jackknife samples from desired dataset
+
+User is expected to define the following:
+	datain: this should be the data defined from a PROC REG out=. This should be the same as above in boot macro.
+	vars: this should be the variables used in PROC REG (as response and variables)
+	out: this should be the name of the dataset you want to save your jackknives as
+	reps: specifies the number of replicate samples
+*/
+
+
+***********************************************************************************************;
+%macro BCaInterval(bootstrap=,jk=,original=,stat=,alpha=0.05)/store;
+data use;
+  set &bootstrap(in=boot)
+      %if (&jk ne ) %then &jk(in=jk);
+      %if (&original ne ) %then &original(in=orig); 
+      ;
+  if boot then do; type='Boot'; end;
+  if jk then do; type='JK' ; end;
+  if orig then do; type='Orig' ; end; 
+run; 
+proc sql;
+select max(replicate)
+	into :B
+	from &bootstrap
+	; 
+  %if (&original ne ) %then %do;
+  select &stat
+    into :OrigEst
+    from use
+    where type eq "Orig" 
+    ; 
+  select probit(sum(&stat lt &OrigEst)/&B)
+    into :BC
+    from use
+    where type eq "Boot" 
+    ; 
+    %end;
+    
+    %else %do;
+    	%let BC=0;
+    %end;
+ 
+ select max(replicate)
+	into :n
+	from &jk
+	; 
+  %if (&jk ne ) %then %do;
+ select sum(&stat)/&n
+    into :jk_mean
+    from use
+    where type eq "JK"
+    ; 
+  
+  select sum((&jk_mean-&stat)**3)/(6*sum((&jk_mean-&stat)**2)**(3/2))
+    into :a
+    from use
+    where type eq "JK"
+    ;
+%end;
+%else %do;
+	%let a=0;
+%end; 
+quit;
+
+proc sort data=&bootstrap; 
+  by &stat;
+run;
+
+data interval;
+  retain lcl;
+  set &bootstrap;
+  
+  a=&a;
+  if a eq . then a=0; 
+  Alpha1=probnorm(&BC+(&BC+probit(&alpha/2))/(1-a*(&BC+probit(&alpha/2))));
+  Alpha2=probnorm(&BC+(&BC+probit(1-&alpha/2))/(1-a*(&BC+probit(1-&alpha/2)))); 
+   
+  low=round(Alpha1*&B,1);
+  high=round(Alpha2*&B,1);
+  
+  if _n_ eq low then lcl=&stat;
+  if _n_ eq high then do;
+    ucl=&stat;
+    output;
+  end;
+  keep lcl ucl;
+run; 
+%mend;
+
+/* Boostrapping with Bias Correction and Acceleration
+Returns: number of boots, parameter estimate, Upper Confidence Limit, number of observations, parameter estimate, Lower Confidence Limit in Results
+		Upper and Lower confidence interval in data
+
+User is expected to define the following:
+	bootstrap: dataset where bootstrap samples are
+	stat: variable (from original dataset) desired for statistical analysis
+
+User can define the following (but is not required):
+	jk: dataset where jackknife samples are
+	original: dataset where original data is
+
+The following arguments have defaults, but the user can choose an alternate value:
+	alpha: default 0.05
+*/
