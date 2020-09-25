@@ -1,0 +1,188 @@
+***************number 1;
+data program;
+	x1= COMPRESS('Patient X: is your ID# 17?','#?');
+	x2= COMPRESS('Patient X: is your ID# 17?', ,'D');
+	x3= COMPRESS('Patient X: is your ID# 17?', ,'kd');
+	x4= COMPRESS('Patient X: is your ID# 17?', '#' ,'kd');
+run;
+
+
+***********number 2.A;
+proc sgplot data=sashelp.cars noautolegend noborder ;
+	hbar origin / response=mpg_city stat=mean dataskin=gloss limits=upper 
+		 limitstat=stderr limitattrs=(color=blue) fillattrs=(color=cx36CF36);
+	yaxis display=(nolabel) ;
+	xaxis label='AVG. MPG, City';
+	
+run;
+
+*****************number 2.B;
+proc sgplot data=sashelp.cars noborder;
+	hbar origin / response=mpg_city group= type groupdisplay=cluster stat=mean 
+		limits=upper limitstat=stderr limitattrs=(color=blue) dataskin=matte ;
+	where type not in ('Hybrid', 'Truck');
+	yaxis display=(nolabel);
+	xaxis label='AVG. MPG, City';
+	keylegend / location=inside position=bottomright across=1 title="";
+run;
+
+************************number 3.A*******************************;
+proc means data=sashelp.cars;
+	class origin type;
+	output out=work.car3 q3(MPG_City MPG_Highway)=CityQ3 HighwayQ3 n=N_Obs  ;
+run;
+proc sgplot data=work.car3 noborder;
+	hbar origin / response=CityQ3 group= type groupdisplay=cluster stat=mean  
+		 dataskin=matte datalabel=N_Obs datalabelpos=right;
+	where type not in ('Hybrid', 'Truck');
+	yaxis display=(nolabel);
+	xaxis label='Third Quartile MPG, City';
+	keylegend / location=outside position=topleft down=1 title="";
+run;
+***********Have to do datalabel=the name (N_Obs) which is the name I gave it in the proc means. Datalabelpos puts it to the right.;
+
+********************3.B*******************************;
+
+proc sgplot data=work.car3 noborder;
+	hbar origin / response=CityQ3 legendlabel='City' fillattrs=(color=cxF39C12) 
+				stat=mean barwidth=.9;
+	hbar origin / response=HighwayQ3 legendlabel='Highway' 
+				fillattrs=(color=cx6666ff transparency=0.3) stat=mean barwidth=.6  ;
+	where type  in ('SUV', 'Truck');
+	yaxis display=(nolabel);
+	xaxis values=(0 to 25 by 5) label='Third Quartile MPG, Trucks & SUVs';
+	keylegend / location=inside position=bottomright across=1 title="" noborder;
+run;
+
+*************************4.A************************;
+
+filename RawData 'C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets';
+run;
+data Density1;
+	infile RawData('Density Estimation v1.txt') dsd truncover firstobs=2;
+	input Date : MMDDYY10. time : time5. Observed Predicted;
+	Diff=Predicted-Observed;
+	format Date QTR.; 
+run;
+
+
+proc compare base=bookdata.densityfull compare=work.density1
+			out=work.diff outbase outcompare outdif outnoequal method=absolute criterion=1E-9;
+run;
+	
+***************4.B***************************;
+
+
+proc sgplot data=density1 noborder;
+	vbar date / stat=mean 
+				response=Diff 
+				legendlabel='1 Standard Error'
+				limits=lower limitstat=stderr limitattrs=(color=black);
+	yaxis values=(-1.25 to 0 by .25) offsetmin=.1;
+	xaxis label="Quarter of Year";
+	format date QTRR.;
+run;
+
+**********************5;
+data Density2;
+	infile RawData('Density Estimation v2.txt')  truncover firstobs=7;
+	input weekday $ : 
+		+6 Date MMDDYY10.
+		Observed : Predicted; 
+	format date date9. 
+run;
+
+*don't do +1 in front of observed because pointer already there based off
+informat mmddyy10.;
+
+proc compare base=bookdata.densitypartial compare=work.density2
+			out=work.diff outbase outcompare outdif outnoequal method=absolute criterion=1E-9;
+run;
+
+*******************6.A*******************;
+filename RawData 'C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets';
+run;
+data Ipums;
+	infile RawData('Ipums2005Formatted.txt')  missover;
+	input Serial 7. State $25. MortgagePayment $ 135-140 HomeValue $ 155-164
+		City $ 33-72 CityPop $ 73-78 Metro 79 CountyFips 80-82;
+	format MortgagePayment dollar6. Homevalue dollar10. citypop comma6.;
+run;
+
+******************6.B***************;
+data Ipums2;
+	infile RawData('Ipums2005Formatted.txt')  missover;
+	input Serial 1-7 State $ 8-27 
+		@135 MortgagePayment  dollar6. 
+		@155 HomeValue dollar10.
+		City $ 33-72 
+		@ 73 CityPop comma6.
+		Metro 79 CountyFips 80-82;
+	format MortgagePayment dollar6. Homevalue dollar10. citypop comma6.;
+run;
+	
+*****************6.C************;
+data Ipums2;
+	infile RawData('Ipums2005Formatted.txt')  missover;
+	input Serial : State $ 
+		@135 MortgagePayment  dollar6. 
+		@155 HomeValue dollar10. :
+		City $ 33-72 
+		@ 73 CityPop comma6. :
+		Metro : CountyFips 80-82;
+	format MortgagePayment dollar6. Homevalue dollar10. citypop comma6.;
+run;
+
+******ASK: whats the difference exactly between 6.B and 6.C? Go over the 
+exact differences between modified list input and formatted input.
+Formatted uses delimiters- use those where you can- where you are not 
+skipping variables, where you go from one to the next so you don't
+need column inputs called. ;
+
+******************6.C***********************;
+data Ipums3;
+	infile RawData('Ipums2005Formatted.txt') dsd dlm=' '  missover;
+	input Serial 7. State $20. 
+		@135 MortgagePayment  dollar6.  
+		@155 HomeValue dollar10.
+		@33 City $40. 
+		CityPop comma6.
+		Metro 1.  CountyFips 2. ;
+run;
+
+
+
+************************In class 6: ;
+
+*formatted input- only the ones with comma format need formatted input, everything else could be column input;  
+*the other need length or columns to be read;
+*A.;
+data work.ipums2005formatted;
+	infile RawData("IPUMS2005formatted.txt");
+	input Serial 7. State $25. 
+	@ 135 MortgagePayment comma6.
+	@155 Homevalue comma10. 
+	@33 City $40. CityPop comma6. 
+	Metro 1. CountyFips 3. ;
+run; 
+
+*************;
+data work.ipums2005formatted;
+	infile RawData("IPUMS2005formatted.txt");
+	input Serial 1-7 State $ 8-27 
+	@ 135 MortgagePayment comma6.
+	@155 Homevalue comma10. 
+	City $ 33-72 CityPop comma6. 
+	Metro 79 CountyFips 80-82 ;
+run; 
+************************;
+data work.ipums2005formatted;
+	infile RawData("IPUMS2005formatted.txt");
+	input Serial 1-7 State $ 
+	@ 135 MortgagePayment : comma.
+	@155 Homevalue : comma. 
+	City $ 33-72 CityPop comma6. 
+	Metro 79 CountyFips 80-82 ;
+run; 
+ *so state will read until blank, default delimiter; 
+ 
