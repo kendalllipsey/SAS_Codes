@@ -1,0 +1,130 @@
+*************Programming 1.A**********;
+ods graphics / AttrPriority=None;
+proc sgplot data= sashelp.stocks;
+	scatter y=high x=date / group=stock;
+	styleattrs datacontrastcolors=(blue maroon teal) datasymbols=(circle plus X);
+	yaxis label='High' values=(0 to 250 by 50) valuesformat=dollar12.;
+	xaxis label='Date';
+run;
+
+*ASK:ATTRPRIORITY: won't change symbols without. Why?
+*HTML destination and file destination- HTML will not cycle through symbols. 
+HTML default HTML color (cycle through all colors before going changing symbols);
+
+**************Programming 1.B**********; 
+proc sort data=sashelp.stocks out=stockSort;
+	by date;
+run;
+proc transpose data=stockSort out=stockTr;
+	var high;
+	by date;
+	id stock;
+run;
+
+proc sgplot data=stockTr;
+	scatter x=date y=IBM / markerattrs=(color=blue symbol=circle); 
+	scatter x=date y=Intel / markerattrs=(color=maroon symbol=plus);
+	scatter x=date y=Microsoft / markerattrs=(color=teal symbol=X);
+	yaxis label='High' values=(0 to 250 by 50) valuesformat=dollar12.;
+	xaxis label='Date';
+	keylegend / title='Stock';
+run;
+	
+*************Programming 1.C**************************;
+*A would scale up better- don't have to write scatter statement for each stock;
+
+
+**********Programming 2.A.*****************************;
+proc sort data = sashelp.prdsale out = prdSubset(drop = year);
+	by country region division prodtype product quarter;
+	where year eq 1993;
+run;
+proc transpose data = PrdSubset out = salesWide prefix = month;
+	by country region division prodtype product quarter;
+	var actual predict;
+run;
+
+***mine***;
+proc transpose data=salesWide out=my2;
+	by country region division prodtype product quarter;
+	var month1 month2 month3 ;
+run;
+
+data next;
+	set my2;
+	select (_name_);
+	when ('month1') Month='Jan';
+	when ('month2') Month='Feb';
+	when ('month3') Month='Mar';
+	end;
+    drop _name_;
+run;     
+
+********;
+*OTher way;
+proc transpose data = PrdSubset out = salesWide(rename=(col1=Jan col2=Feb col3=Mar));;
+	by country region division prodtype product quarter;
+	var actual predict;
+run;
+
+proc transpose data=salesWide out=my2(rename=(_name_ =Month));
+	by country region division prodtype product quarter;
+	var Jan Feb Mar ;
+run;
+
+
+
+*************************Programming 2.B.*******************************;
+proc compare base=PrdSubset compare=next out=work.diff outbase outcompare outdif outnoequal;
+run;
+
+
+
+*********** ***************Programmin 3******************************;
+proc corr data=sashelp.baseball;
+	var nHome nRuns nRBI;
+	with nHits nBB;
+run;
+
+*******************Programming 4.A******************************;
+*Use the BookData.Visit and BookData.PayStatus data sets to write a program that does the following
+in a single DATA step.
+*Joins the data sets by PatientID
+*Creates three data sets: AllRecords, Match, and Mismatch
+*Ensure every record goes into the AllRecords data set: only records that come from both data
+sets go into the Match data set: records that only come from one data set go into the Mismatch
+data set
+* Writes the PDV to the log any time a mismatched observation is written to the Mismatch data
+set
+;
+
+data work.AllRecords work.Match work.Mismatch;
+	merge BookData.Visit(in=inVist) BookData.PayStatus(in=inPay);
+		output work.AllRecords;
+	by PatientID;	
+	if (inVisit eq 1) and (inPay eq 1) then output work.Match;
+		else do;
+			output work.MisMatch;
+			putlog "Note: a Mismatch was Observed.";
+	end;
+run;
+
+
+
+****************Programming 5.A****************************************;
+* Use the Sashelp.Citimon and Sashelp.Citiday data sets to answer the following questions.
+a. What variables are available for use as key variables during a match-merge? Are the values
+useful for carrying out a match-merge?
+b. Write a DATA step that carries out a one-to-many match-merge so that the monthly
+indicators from Sashelp.Citimon are joined with each record from the same month in
+Sashelp.Citiday. Ensure that only records from Sashelp.Citiday remain in the final data set.
+;
+
+proc contents data=sashelp.Citiday;
+run; 
+proc contents data=sashelp.Citimon;
+run;
+
+
+
+
