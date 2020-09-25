@@ -1,0 +1,112 @@
+*****Programming Basics, Number 1*****************;
+proc means data=sashelp.cars min q1 median q3 max maxdec=1;
+	var MPG_City;
+	class origin;
+run;
+	
+proc freq data=sashelp.cars;
+	table Type*Origin/ nocol nopercent;
+	where type not in ('Truck', 'Hybrid');
+	run;
+	
+*******************Number 2***********************************;
+proc format;
+	value systolic
+	0-<120='Normal (Below 120)'
+	120-139='Pre-Hyptertension (120-139)'
+	140-159='Stage 1 (140-159)'
+	160-high='Stage 2(160 or More)'
+	;
+run;
+
+proc means data=sashelp.heart maxdec=1 mean median min max;
+	class systolic;
+	var cholesterol weight;
+	format systolic systolic.;
+run;
+
+****Have to set variables because otherwise gives you the five basics- by setting the four
+variables mean median min max you get rid of the n column;
+proc freq data=sashelp.heart;
+	table systolic*sex/ nofreq;
+	format systolic systolic.;
+run;
+
+*************Number 3********************************************;
+data work.heartcsv;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\heart.csv" dsd;
+	Length deathcause$ 26. Chol_Status$ 10. Weight_Status$ 11. Smoking_Status$ 17.;
+	input Status$ deathcause$ AgeCHDdiag Sex$ AgeAtStart Height Weight Diastolic 
+	Systolic MRW Smoking AgeAtDeath Cholesterol Chol_Status$ BP_Status$ 
+	Weight_Status$ Smoking_Status$;
+	label deathcause='Cause of Death' AgeAtStart='Age at Start' MRW='Metropolitan Relative Weight'  
+	AgeAtDeath='Age at Death' Chol_Status$='Cholesterol Status' BP_Status$='Blood Pressure Status'
+	Weight_Status$='Weight Status';
+run;
+proc compare base=work.heartcsv compare=sashelp.heart out=work.diff outbase outcompare outdif 
+	outnoequal method=absolute criterion=1E-9;
+run;
+
+
+proc contents data=work.diff;
+run;
+
+************************Number 4**************************************;
+filename RawData 'C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets';
+data work.heartdat;
+	infile RawData('heart.dat');
+	input status$ 1-5 deathcause$ 6-37 AgeCHDiag 38-39 Sex$ 40-45 AgeAtStart 46-47 Height 116-120 
+	Weight 52-54  Diastolic 55-57 Systolic 58-60 MRW 61-63 Smoking 64-65 AgeAtDeath 66-67 Cholesterol 68-70
+	Chol_Status$ 71-80 BP_Status$ 81-87 Weight_Status$ 88-98 Smoking_Status$ 99-115;
+	label deathcause='Cause of Death' AgeAtStart='Age at Start' MRW='Metropolitan Relative Weight'  
+	AgeAtDeath='Age at Death' Chol_Status$='Cholesterol Status' BP_Status$='Blood Pressure Status'
+	Weight_Status$='Weight Status';
+run;
+proc compare base=work.heartdat compare=sashelp.heart out=work.diff outbase outcompare outdif 
+	outnoequal method=absolute criterion=1E-9;
+run;
+
+************************Number 5******************************;
+proc sort data=sashelp.mdv out=sorted;
+	by type code country;
+run;
+
+
+Proc Print data=sorted noobs;
+	By type code country;
+	sumby code;
+	id type code country;
+	var  sales95 _4cast96;
+	sum sales95 _4cast96;
+
+run; 
+
+***************ASK***********;
+              *FROM SOLUTIONS; 
+proc sort data = sashelp.mdv out = sorted;
+by type code country;
+run;
+proc print data = sorted;
+ by type code country;
+ sumby code;
+ id type code country;
+ var;
+ sum sales95 _4cast96;
+ format sales95 _4cast96 dollar11.2;
+run;
+
+*************************Number 6*********************************;
+data work.dflights;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\flights.dat";
+	input FlightNum 1-3 Date$ 4-11 Destination$ 12-14 FirstClass 16-17 EconClass 18-20;
+	putlog 'Note:' FlightNum= FirstClass=;
+run; 
+
+data work.pflights; *PRN from 2.9.1;
+	infile "C:\Users\kdl8569\Documents\My SAS Files\Data\Raw Data Sets\flights.prn";
+	input FlightNum Date $ Destination $ FirstClass EconClass;
+run;
+
+proc compare base=work.dflights compare=work.pflights out=work.flightdiff outbase
+	outcompare outdif outnoequal method=absolute criterion=1E-9;
+run; *comparision yields simlar data except for date; 
